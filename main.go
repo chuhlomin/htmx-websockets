@@ -3,16 +3,18 @@
 package main
 
 import (
+	"bytes"
 	"flag"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sync"
+	"text/template"
 )
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
 
-func (s Server) webhook(w http.ResponseWriter, r *http.Request) {
+func (s *server) webhook(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Failed to read body: %v", err)
@@ -21,12 +23,36 @@ func (s Server) webhook(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Received webhook: %s", string(b))
 
-	s.hub.Broadcast <- b
+	var buf bytes.Buffer
+	err = messageTemplate.Execute(
+		&buf,
+		struct {
+			Raw string
+		}{
+			Raw: string(b),
+		},
+	)
+	if err != nil {
+		log.Printf("Failed to execute template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// wrap the message in a div so we can use htmx to add it to the page
+	s.hub.Broadcast <- []byte("<div hx-swap-oob=\"afterbegin:#messages\"><div class=\"message\">" + buf.String() + "</div></div>")
+
+	s.mutex.Lock()
+	s.pastMessages = append(s.pastMessages, buf.String())
+	if len(s.pastMessages) > 10 {
+		s.pastMessages = s.pastMessages[1:]
+	}
+	log.Printf("Now have %d past messages", len(s.pastMessages))
+	s.mutex.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s Server) events(w http.ResponseWriter, r *http.Request) {
+func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	client, err := NewClient(s.hub, w, r)
 	if err != nil {
 		log.Printf("Failed to create WebSocket client: %v", err)
@@ -39,7 +65,7 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 	go client.ReadPump()
 }
 
-func (s Server) home(w http.ResponseWriter, r *http.Request) {
+func (s *server) home(w http.ResponseWriter, r *http.Request) {
 	homeTemplate.Execute(
 		w,
 		struct {
@@ -52,16 +78,17 @@ func (s Server) home(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-type Server struct {
+type server struct {
 	messageChan  chan string
 	pastMessages []string
+	mutex        sync.Mutex
 	hub          *Hub
 }
 
 func main() {
-	s := Server{
+	s := server{
 		messageChan:  make(chan string),
-		pastMessages: make([]string, 10),
+		pastMessages: []string{},
 		hub:          NewHub(),
 	}
 
@@ -82,81 +109,25 @@ var homeTemplate = template.Must(template.New("").Parse(`
 <html>
 <head>
 <meta charset="utf-8">
-<script>  
-window.addEventListener("load", function(evt) {
-
-    var output = document.getElementById("output");
-    var input = document.getElementById("input");
-    var ws;
-
-    var print = function(message) {
-        var d = document.createElement("div");
-        d.textContent = message;
-        output.appendChild(d);
-        output.scroll(0, output.scrollHeight);
-    };
-
-    document.getElementById("open").onclick = function(evt) {
-        if (ws) {
-            return false;
-        }
-        ws = new WebSocket("{{.WebsocketHost}}");
-        ws.onopen = function(evt) {
-            print("OPEN");
-        }
-        ws.onclose = function(evt) {
-            print("CLOSE");
-            ws = null;
-        }
-        ws.onmessage = function(evt) {
-            print("RESPONSE: " + evt.data);
-        }
-        ws.onerror = function(evt) {
-            print("ERROR: " + evt.data);
-        }
-        return false;
-    };
-
-    document.getElementById("send").onclick = function(evt) {
-        if (!ws) {
-            return false;
-        }
-        print("SEND: " + input.value);
-        ws.send(input.value);
-        return false;
-    };
-
-    document.getElementById("close").onclick = function(evt) {
-        if (!ws) {
-            return false;
-        }
-        ws.close();
-        return false;
-    };
-
-});
-</script>
+<script src="https://unpkg.com/htmx.org@1.9.3"></script>
+<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+<style>
+.message { margin-bottom: 1em; }
+.message:nth-child(odd) { background-color: #eee; }
+</style>
 </head>
 <body>
-<table>
-<tr><td valign="top" width="50%">
-<p>Click "Open" to create a connection to the server, 
-"Send" to send a message to the server and "Close" to close the connection. 
-You can change the message and send multiple times.
-<p>
-<form>
-<button id="open">Open</button>
-<button id="close">Close</button>
-<p><input id="input" type="text" value="Hello world!">
-<button id="send">Send</button>
-</form>
-</td><td valign="top" width="50%">
-<div id="output" style="max-height: 70vh;overflow-y: scroll;">
-{{ range .PastMessages }}
-<div>{{ . }}</div>
-{{ end }}
+<div hx-ext="ws" ws-connect="/events">
+	<div id="messages">
+		{{ range .PastMessages }}
+		<div class="message">{{ . }}</div>
+		{{ end }}
+	</div>
 </div>
-</td></tr></table>
 </body>
 </html>
+`))
+
+var messageTemplate = template.Must(template.New("").Parse(`
+	{{ .Raw }}
 `))

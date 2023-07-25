@@ -72,7 +72,7 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 			WebsocketHost string
 			PastMessages  []string
 		}{
-			WebsocketHost: "wss://" + r.Host + "/events",
+			WebsocketHost: "ws://" + r.Host + "/events",
 			PastMessages:  s.pastMessages,
 		},
 	)
@@ -98,6 +98,9 @@ func main() {
 	log.SetFlags(0)
 	http.HandleFunc("/webhook", s.webhook)
 	http.HandleFunc("/events", s.events)
+	http.HandleFunc("/sprite.png", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "sprite.png")
+	})
 	http.HandleFunc("/", s.home)
 
 	log.Println("Server started at", *addr)
@@ -112,18 +115,70 @@ var homeTemplate = template.Must(template.New("").Parse(`
 <script src="https://unpkg.com/htmx.org@1.9.3"></script>
 <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
 <style>
+body { font-size: 12pt; font-family: sans-serif; background-color: #f0f0ff; }
 .message { margin-bottom: 1em; }
 .message:nth-child(odd) { background-color: #eee; }
+#status {
+	font-size: 9pt;
+	font-family: SF Mono, monospace;
+	color: #8aa487;
+}
+#status::before {
+	content: "";
+	display: inline-block;
+	width: 25px;
+	height: 19px;
+	margin-right: 0.2em;
+	vertical-align: middle;
+	background-image: url(sprite.png);
+	background-repeat: no-repeat;
+	background-position: left center;
+	background-size: 100px 19px;
+}
+#status[data-status="connected"] { color: #8aa487; }
+#status[data-status="error"] { color: #c4796f; }
+#status[data-status="connecting"] { color: #c8ad97; }
+#status[data-status="disconnected"] { color: #8e8e8e; }
+
+#status[data-status="connected"]::before { background-position: left center; }
+#status[data-status="error"]::before { background-position: -25px center; }
+#status[data-status="connecting"]::before { background-position: -50px center; }
+#status[data-status="disconnected"]::before { background-position: right center; }
 </style>
 </head>
 <body>
 <div hx-ext="ws" ws-connect="/events">
+	<div id="status"></div>
 	<div id="messages">
 		{{ range .PastMessages }}
 		<div class="message">{{ . }}</div>
 		{{ end }}
 	</div>
 </div>
+<script type="text/javascript" defer>
+let status = document.getElementById('status');
+
+// document.body.addEventListener('htmx:wsConnecting', function(evt) {
+// 	console.log('connecting');
+// 	status.innerText = 'Connecting...';
+// 	status.setAttribute('data-status', 'connecting');
+// });
+document.body.addEventListener('htmx:wsOpen', function(evt) {
+	console.log('connected');
+	status.innerText = 'Connected';
+	status.setAttribute('data-status', 'connected');
+});
+document.body.addEventListener('htmx:wsClose', function(evt) {
+	console.log('disconnected');
+	status.innerText = 'Disconnected';
+	status.setAttribute('data-status', 'disconnected');
+});
+// document.body.addEventListener('htmx:wsError', function(evt) {
+// 	console.log('error');
+// 	status.innerText = 'Error';
+// 	status.setAttribute('data-status', 'error');
+// });
+</script>
 </body>
 </html>
 `))

@@ -34,10 +34,11 @@ var upgrader = ws.Upgrader{
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
-	hub  *Hub
-	conn *ws.Conn
-	send chan []byte
-	name string
+	hub    *Hub
+	conn   *ws.Conn
+	send   chan []byte
+	name   string
+	active bool
 }
 
 // NewClient creates new Client
@@ -50,10 +51,11 @@ func NewClient(hub *Hub, w http.ResponseWriter, r *http.Request, name string) (*
 	}
 
 	return &Client{
-		hub:  hub,
-		conn: conn,
-		send: make(chan []byte, 256),
-		name: name,
+		hub:    hub,
+		conn:   conn,
+		send:   make(chan []byte, 256),
+		name:   name,
+		active: true,
 	}, nil
 }
 
@@ -79,6 +81,19 @@ func (c *Client) ReadPump() {
 			break
 		}
 		log.Printf("← %s", message)
+
+		switch string(message) {
+		case "visible":
+			c.active = true
+			go func() {
+				c.hub.updateList <- struct{}{}
+			}()
+		case "hidden":
+			c.active = false
+			go func() {
+				c.hub.updateList <- struct{}{}
+			}()
+		}
 	}
 }
 

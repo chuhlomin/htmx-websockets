@@ -92,7 +92,11 @@ func (h *Hub) getClientList(name string) string {
 		if client.name == name {
 			continue
 		}
-		buf.WriteString("<li>" + client.name + "</li>")
+		if !client.active {
+			buf.WriteString("<li><em>" + client.name + "</em></li>")
+		} else {
+			buf.WriteString("<li>" + client.name + "</li>")
+		}
 	}
 	buf.WriteString("</ul>")
 	return buf.String()

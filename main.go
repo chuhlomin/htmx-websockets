@@ -53,7 +53,8 @@ func (s *server) webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) events(w http.ResponseWriter, r *http.Request) {
-	client, err := NewClient(s.hub, w, r)
+	name := r.Header.Get("User-Agent")
+	client, err := NewClient(s.hub, w, r, name)
 	if err != nil {
 		log.Printf("Failed to create WebSocket client: %v", err)
 		return
@@ -148,7 +149,10 @@ body { font-size: 12pt; font-family: sans-serif; background-color: #f0f0ff; }
 </head>
 <body>
 <div hx-ext="ws" ws-connect="/events">
-	<div id="status"></div>
+	<div id="panel">
+		<div id="users"></div>
+		<div id="status"></div>
+	</div>
 	<div id="messages">
 		{{ range .PastMessages }}
 		<div class="message">{{ . }}</div>
@@ -158,11 +162,9 @@ body { font-size: 12pt; font-family: sans-serif; background-color: #f0f0ff; }
 <script type="text/javascript" defer>
 let status = document.getElementById('status');
 
-// document.body.addEventListener('htmx:wsConnecting', function(evt) {
-// 	console.log('connecting');
-// 	status.innerText = 'Connecting...';
-// 	status.setAttribute('data-status', 'connecting');
-// });
+// htmx:wsConnecting
+// htmx:wsError
+
 document.body.addEventListener('htmx:wsOpen', function(evt) {
 	console.log('connected');
 	status.innerText = 'Connected';
@@ -173,11 +175,6 @@ document.body.addEventListener('htmx:wsClose', function(evt) {
 	status.innerText = 'Disconnected';
 	status.setAttribute('data-status', 'disconnected');
 });
-// document.body.addEventListener('htmx:wsError', function(evt) {
-// 	console.log('error');
-// 	status.innerText = 'Error';
-// 	status.setAttribute('data-status', 'error');
-// });
 </script>
 </body>
 </html>

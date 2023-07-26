@@ -37,10 +37,11 @@ type Client struct {
 	hub  *Hub
 	conn *ws.Conn
 	send chan []byte
+	name string
 }
 
 // NewClient creates new Client
-func NewClient(hub *Hub, w http.ResponseWriter, r *http.Request) (*Client, error) {
+func NewClient(hub *Hub, w http.ResponseWriter, r *http.Request, name string) (*Client, error) {
 	// upgrader.CheckOrigin = checkOriginAllowLocalhost
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -52,6 +53,7 @@ func NewClient(hub *Hub, w http.ResponseWriter, r *http.Request) (*Client, error
 		hub:  hub,
 		conn: conn,
 		send: make(chan []byte, 256),
+		name: name,
 	}, nil
 }
 

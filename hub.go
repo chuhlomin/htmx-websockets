@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"sync"
 )
@@ -24,6 +23,9 @@ type Hub struct {
 
 	// Mutex for clients
 	mutex sync.Mutex
+
+	// Notify channel
+	updateList chan struct{}
 }
 
 // NewHub creates new Hub
@@ -33,12 +35,12 @@ func NewHub() *Hub {
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
+		updateList: make(chan struct{}),
 	}
 }
 
 // Run handles communication operations with Hub
 func (h *Hub) Run() {
-	var clientListChanged bool
 	for {
 		select {
 		case client := <-h.Register:
@@ -46,10 +48,10 @@ func (h *Hub) Run() {
 
 			h.mutex.Lock()
 			h.clients[client] = true
-			clientListChanged = true
+			go func() {
+				h.updateList <- struct{}{}
+			}()
 			h.mutex.Unlock()
-
-			// h.Broadcast <- []byte("<div id=\"users\">" + h.getCurrentUsers() + "</div>")
 
 		case client := <-h.Unregister:
 
@@ -60,10 +62,10 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 			}
-			clientListChanged = true
+			go func() {
+				h.updateList <- struct{}{}
+			}()
 			h.mutex.Unlock()
-
-			// h.Broadcast <- []byte("<div id=\"users\">" + h.getCurrentUsers() + "</div>")
 
 		case message := <-h.Broadcast:
 			h.mutex.Lock()
@@ -71,22 +73,25 @@ func (h *Hub) Run() {
 				client.send <- message
 			}
 			h.mutex.Unlock()
-		}
 
-		if clientListChanged {
-			go func() {
-				h.Broadcast <- []byte("<div id=\"users\">" + h.getCurrentUsers() + "</div>")
-				clientListChanged = false
-			}()
+		case <-h.updateList:
+			h.mutex.Lock()
+			for client := range h.clients {
+				client.send <- []byte("<div id=\"users\">" + h.getClientList(client.name) + "</div>")
+			}
+			h.mutex.Unlock()
 		}
 	}
 }
 
-func (h *Hub) getCurrentUsers() string {
+func (h *Hub) getClientList(name string) string {
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("<div id=\"users\">%d users connected:</div>", len(h.clients)))
 	buf.WriteString("<ul>")
+	buf.WriteString("<li><b>" + name + "</b></li>")
 	for client := range h.clients {
+		if client.name == name {
+			continue
+		}
 		buf.WriteString("<li>" + client.name + "</li>")
 	}
 	buf.WriteString("</ul>")

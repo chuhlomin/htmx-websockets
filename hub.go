@@ -87,7 +87,7 @@ func (h *Hub) Run() {
 func (h *Hub) getClientList(name string) string {
 	var buf bytes.Buffer
 	buf.WriteString("<ul>")
-	buf.WriteString("<li><b>" + name + "</b></li>")
+	buf.WriteString("<li>" + name + "</li>")
 	for client := range h.clients {
 		if client.name == name {
 			continue

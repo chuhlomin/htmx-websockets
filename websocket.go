@@ -80,7 +80,7 @@ func (c *Client) ReadPump() {
 			}
 			break
 		}
-		log.Printf("← %s", message)
+		// log.Printf("← %s", message)
 
 		switch string(message) {
 		case "visible":

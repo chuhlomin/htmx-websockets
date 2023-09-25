@@ -5,7 +5,7 @@ package main
 import (
 	"bytes"
 	"flag"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -14,8 +14,10 @@ import (
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
 
+const maxMessages = 10
+
 func (s *server) webhook(w http.ResponseWriter, r *http.Request) {
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Failed to read body: %v", err)
 		return
@@ -39,11 +41,11 @@ func (s *server) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// wrap the message in a div so we can use htmx to add it to the page
-	s.hub.Broadcast <- []byte("<div hx-swap-oob=\"afterbegin:#messages\"><div class=\"message\">" + buf.String() + "</div></div>")
+	s.hub.Broadcast <- []byte("<ul hx-swap-oob=\"afterbegin:#messages\"><li class=\"message\">" + buf.String() + "</li></ul>")
 
 	s.mutex.Lock()
 	s.pastMessages = append(s.pastMessages, buf.String())
-	if len(s.pastMessages) > 10 {
+	if len(s.pastMessages) > maxMessages {
 		s.pastMessages = s.pastMessages[1:]
 	}
 	log.Printf("Now have %d past messages", len(s.pastMessages))
@@ -116,12 +118,15 @@ var homeTemplate = template.Must(template.New("").Parse(`
 <script src="https://unpkg.com/htmx.org@1.9.3"></script>
 <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
 <style>
-body { font-size: 12pt; font-family: sans-serif; background-color: #f0f0ff; }
-.message { margin-bottom: 1em; }
-.message:nth-child(odd) { background-color: #eee; }
-#status {
-	font-size: 9pt;
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+body {
+	font-size: 12pt;
 	font-family: SF Mono, monospace;
+	background-color: #f0f0ff;
+	padding: 20px;
+}
+#status {
 	color: #8aa487;
 }
 #status::before {
@@ -145,19 +150,24 @@ body { font-size: 12pt; font-family: sans-serif; background-color: #f0f0ff; }
 #status[data-status="error"]::before { background-position: -25px center; }
 #status[data-status="connecting"]::before { background-position: -50px center; }
 #status[data-status="disconnected"]::before { background-position: right center; }
+
+#users ul { padding-left: 20px; }
+#messages { padding-left: 20px; }
 </style>
 </head>
 <body>
 <div hx-ext="ws" ws-connect="/events">
-	<div id="panel">
-		<div id="users"></div>
-		<div id="status"></div>
-	</div>
-	<div id="messages">
+	Websockets status: <span id="status"></span><br>
+	<br>
+	Clients:
+	<div id="users"></div>
+	<br>
+	Messages:
+	<ul id="messages">
 		{{ range .PastMessages }}
-		<div class="message">{{ . }}</div>
+		<li>{{ . }}</li>
 		{{ end }}
-	</div>
+	</ul>
 </div>
 <script type="text/javascript" defer>
 let status = document.getElementById('status');

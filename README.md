@@ -1,7 +1,7 @@
 # htmx-websockets
 
 This is a simple example of using WebSockets with [HTMX](https://htmx.org/).  
-It uses the [htmx WebSockets extension](https://htmx.org/extensions/web-sockets/)
+It uses the [htmx WebSockets extension](https://github.com/bigskysoftware/htmx-extensions/blob/main/src/ws/README.md)
 to connect to a websocket server and echo messages back to the client.
 
 ## Server

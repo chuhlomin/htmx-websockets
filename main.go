@@ -115,8 +115,8 @@ var homeTemplate = template.Must(template.New("").Parse(`
 <html>
 <head>
 <meta charset="utf-8">
-<script src="https://unpkg.com/htmx.org@1.9.3"></script>
-<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+<script src="https://unpkg.com/htmx.org@2.0.0" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
